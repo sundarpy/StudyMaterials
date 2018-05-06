@@ -1,128 +1,118 @@
 from rest_framework import serializers
-import ast,pdb
-from gateway.signal_processing.models import TaggedNews, SignalLibrary, LevelRatingLibrary, BusinessFunctionLibrary, \
-    GeographyLibrary, SignalPerformanceLibrary, DealRenewalLocation, MovementFluxLibrary,MasterCompany
+from .models import *
+from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
+from django.db.models import Q
+
+from rest_framework.serializers import (
+	CharField,
+	EmailField,
+	ModelSerializer,
+	ValidationError
+	)
+
+# class UserCreateSerilizers(ModelSerializer):
+# 	# email = EmailField(label="Email Address")
+# 	# email2 = EmailField(label="Confirm Email")
 
 
-class TaggedNewsSerializer(serializers.ModelSerializer):
-    other_columns = serializers.SerializerMethodField()
-    class Meta:
-        model = TaggedNews
-        fields = '__all__'
+# 	class Meta:
+# 		model = User
+# 		fields = ('username', 'email', 'password')
+# 		extra_kwargs = {"password":{"read_only": True}}
 
-    def get_other_columns(self,obj):
-        try:
-            other_columns = ast.literal_eval(obj.other_columns)
-        except Exception as e:
-            other_columns = ""
-            print(e)
-        return other_columns
+# 	def validate(self, data):
+# 		email = data["email"]
+# 		user_qs = User.objects.filter(email=email)
+# 		if user_qs.exists():
+# 			raise ValidationError("This user has already Registered.")
+# 		return data
+
+	# def validate_email(self, value):
+	# 	data = self.get_initial()
+	# 	email1 = data.get("email2")
+	# 	email2 = value
+
+	# 	if email1 != email2:
+	# 		raise ValidationError("Email must match.")
+
+	# 	user_qs = User.objects.filter(email=email)
+	# 	if user_qs.exists():
+	# 		raise ValidationError("This user has already Registered.")
+
+	# 	return value
+
+	# def create(self, validate_data):
+	# 	username = validate_data["username"]
+	# 	email = validate_data["email"]
+	# 	password = validate_data["password"]
+
+	# 	user_obj = User(username=username, email=email)
+
+	# 	user_obj.set_password(password)
+	# 	user_obj.save()
+	# 	return validate_data
 
 
-class TaggedSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TaggedNews
-        fields = ['url', 'news_id', 'trans_from_dt', 'intensity', 'publication_date', 'oi_score']
 
 
-class TaggedNewsRecordSerilaizer(TaggedNewsSerializer):
-    """"""
-    final_classification = serializers.SerializerMethodField()
-    given_classification = serializers.SerializerMethodField()
-    driver = serializers.SerializerMethodField()
-    new_level = serializers.SerializerMethodField()
-    bussiness_function = serializers.SerializerMethodField()
-    geography = serializers.SerializerMethodField()
-    deal_renewal_location_records = serializers.SerializerMethodField()
-    movement_flux = serializers.SerializerMethodField()
-    performance = serializers.SerializerMethodField()
-    company_name = serializers.SerializerMethodField()
-    class Meta:
-        model = TaggedNews
-        fields = '__all__'
+class UserLoginSerializers(ModelSerializer):
+	token = CharField(allow_blank=True, read_only=True)
+	username =  CharField(required=False, allow_blank=True)
+	email = EmailField(label='Email Address', required=False, allow_blank=True)
 
-    def get_final_classification(self,obj):
-        signal_name = None
-        if obj.final_classification is not None:
-            signal_name = obj.final_classification.signal_name
-        return signal_name
-    def get_given_classification(self,obj):
-        signal_name = None
-        if obj.given_classification is not None:
-            signal_name = obj.given_classification.signal_name
-        return signal_name
-    def get_driver(self,obj):
-        driver = None
-        if obj.driver is not None:
-            driver = obj.driver.driver
-        return driver
+	class Meta:
+		model = User
+		fields = ('username', 'email', 'password', 'token')
+		extra_kwargs ={'password':{'write_only': True}}
 
-    def get_new_level(self,obj):
-        level = None
-        if obj.new_level is not None:
-            level = obj.new_level.levels
-        return level
-    def get_bussiness_function(self,obj):
-        bussiness_function = None
-        if obj.bussiness_function is not None:
-            bussiness_function = obj.bussiness_function.business_functon
-        return bussiness_function
-    def get_geography(self,obj):
-        geography = None
-        if obj.geography is not None:
-            geography = obj.geography.region
-        return geography
+	def validate(self, data):
+		user_obj = None
+		email = data.get('email')
+		username = data.get('username')
+		password = data['password']
+		if not email and not username:
+			raise ValidationError("A username or email is required to login")
+		user = User.objects.filter(
+				Q (email=email) |
+				Q (username=username)
+			).distinct()
+		user = user.exclude(email__isnull=True).exclude(email__iexact='')
+		print user
+		if user.exists() and user.count() == 1:
+			user_obj = user.first()
+		else:
+			raise ValidationError("This username/email is not valid.")
+		if user_obj:
+			if not user_obj.check_password(password):
+				raise ValidationError("Incorrect Password please try again")
 
-    def get_deal_renewal_location_records(self,obj):
-        deal_renewal_location_records = None
-        if obj.deal_renewal_location_records is not None:
-            deal_renewal_location_records = obj.deal_renewal_location_records.deal_location
-        return deal_renewal_location_records
-    def get_movement_flux(self,obj):
-        movement_flux = None
-        if obj.movement_flux is not None:
-            movement_flux = obj.movement_flux.announcement_type
-        return movement_flux
-    def get_performance(self,obj):
-        performance = None
-        if obj.performance is not None:
-            performance = obj.performance.performance
-        return performance
-    def get_company_name(self,obj):
-        company_name = None
-        if obj.company is not None:
-            company_name = obj.company.mvp_company_name
-        return company_name
+		data["token"] = "some random random token."
+		return data
 
-class SignalListSerializer(serializers.Serializer):
-    """
-    """
-    signal = serializers.SerializerMethodField()
-    level = serializers.SerializerMethodField()
-    business = serializers.SerializerMethodField()
-    geography = serializers.SerializerMethodField()
-    signal_performance_records = serializers.SerializerMethodField()
-    deal_renewal_location_records = serializers.SerializerMethodField()
-    low_level =  serializers.SerializerMethodField()
-    medium_level = serializers.SerializerMethodField()
-    high_level = serializers.SerializerMethodField()
-    movement_flux = serializers.SerializerMethodField()
-    user_name = serializers.SerializerMethodField()
-    companies_list = serializers.SerializerMethodField()
-    movement_status = serializers.SerializerMethodField()
-    data_extraction_flag = serializers.SerializerMethodField()
+class UserCreateSerilizers(ModelSerializer):
+	class Meta:
+		model = User
+		fields = ('username', 'email', 'password')
 
-    def get_signal(self, obj):return SignalLibrary.objects.all().values()
-    def get_level(self,obj):return LevelRatingLibrary.objects.all().values()
-    def get_business(self,obj):return BusinessFunctionLibrary.objects.all().values()
-    def get_geography(self,obj):return GeographyLibrary.objects.all().values()
-    def get_signal_performance_records(self,obj):return SignalPerformanceLibrary.objects.all().values()
-    def get_deal_renewal_location_records(self,obj):return DealRenewalLocation.objects.all().values()
-    def get_low_level(self,obj):return ['Yes', 'No']
-    def get_data_extraction_flag(self,obj):return [True,False]
-    def get_medium_level(self, obj): return ['Yes', 'No']
-    def get_high_level(self, obj): return ['Yes', 'No']
-    def get_movement_status(self,obj):return ["Joined","Left"]
-    def get_movement_flux(self,obj):return MovementFluxLibrary.objects.all().values()
-    def get_user_name(self,obj):return TaggedNews.objects.values_list('user', flat=True).distinct()
-    def get_companies_list(self,obj):return MasterCompany.objects.all().distinct().values_list('mvp_company_name', flat=True)
+		extra_kwargs = {"password":{'write_only':True}}
+
+	def create(self, validated_data):
+		username = validated_data["username"] 
+		email = validated_data["email"]
+		password = validated_data["password"]
+		user_obj = User(
+				username = username,
+				email = email
+			)
+		user_obj.set_password(password)
+		user_obj.save()
+
+		return validated_data
+
+	def validate(self, data):
+		email = data["email"]
+		user_qs = User.objects.filter(email=email)
+		if user_qs.exists():
+			raise ValidationError("This Email has already Registered.")
+		return data
